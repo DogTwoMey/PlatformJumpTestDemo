@@ -24,6 +24,7 @@ namespace TarodevController {
 
         // This is horrible, but for some reason colliders are not fully established when update starts...
         private bool _active;
+        private bool _hanging;
         void Awake() => Invoke(nameof(Activate), 0.5f);
         void Activate() =>  _active = true;
         
@@ -44,6 +45,9 @@ namespace TarodevController {
             MoveCharacter(); // Actually perform the axis movement
         }
 
+        public void LateUpdate() {
+            HangCharacter();
+        }
 
         #region Gather Input
 
@@ -69,6 +73,7 @@ namespace TarodevController {
         [SerializeField] [Range(0.1f, 0.3f)] private float _rayBuffer = 0.1f; // Prevents side detectors hitting the ground
 
         private RayRange _raysUp, _raysRight, _raysDown, _raysLeft;
+
         private bool _colUp, _colRight, _colDown, _colLeft;
 
         private float _timeLeftGrounded;
@@ -184,7 +189,7 @@ namespace TarodevController {
         private float _fallSpeed;
 
         private void CalculateGravity() {
-            if (_colDown) {
+            if (_colDown || _hanging) {
                 // Move out of the ground
                 if (_currentVerticalSpeed < 0) _currentVerticalSpeed = 0;
             }
@@ -214,7 +219,7 @@ namespace TarodevController {
         private float _apexPoint; // Becomes 1 at the apex of a jump
         private float _lastJumpPressed;
         private bool CanUseCoyote => _coyoteUsable && !_colDown && _timeLeftGrounded + _coyoteTimeThreshold > Time.time;
-        private bool HasBufferedJump => _colDown && _lastJumpPressed + _jumpBuffer > Time.time;
+        private bool HasBufferedJump => (_colDown && _lastJumpPressed + _jumpBuffer > Time.time) || (_lastJumpPressed + _jumpBuffer > Time.time && _hanging);
 
         private void CalculateJumpApex() {
             if (!_colDown) {
@@ -293,6 +298,27 @@ namespace TarodevController {
                 }
 
                 positionToMoveTo = posToTry;
+            }
+        }
+
+        #endregion
+
+        #region Hang
+
+        private void HangCharacter(){
+
+            _colRight = HangDetection(_raysRight);
+            _colLeft = HangDetection(_raysLeft);
+            _hanging = _colRight || _colLeft;
+
+            if (Input.X != 0 && _hanging) {
+                _coyoteUsable = true;
+                _timeLeftGrounded = Time.time;
+            }
+            
+            bool HangDetection(RayRange range){
+                return EvaluateRayPositions(range).Any(point => Physics2D.Raycast(point, range.Dir, _detectionRayLength, _groundLayer)) &&
+                       !EvaluateRayPositions(range).All(point => Physics2D.Raycast(point, range.Dir, _detectionRayLength, _groundLayer));
             }
         }
 
